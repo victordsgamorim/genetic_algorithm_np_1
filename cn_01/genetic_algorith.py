@@ -1,5 +1,8 @@
 from cn_01.linked_list import LinkedList, Links
 from cn_01.station import Station
+import networkx as nx
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 class GeneticAlgorith(object):
@@ -14,7 +17,7 @@ class GeneticAlgorith(object):
     =============================================
     """""
 
-    def __init__(self, max_gen=200, pop_size=40, pc=0.9, pm=0.2, pl=0.6):
+    def __init__(self, max_gen=1000, pop_size=40, pc=0.9, pm=0.2, pl=0.6):
         self.counter = 0
 
         self.__max_max = max_gen
@@ -28,6 +31,8 @@ class GeneticAlgorith(object):
 
         self.__lchrome = self.__station.turbines.size()  # 50
         self.__population = self.__init_pop()
+
+        self.G = nx.Graph()
 
     "Method of mixing/crossing two chromes "
 
@@ -93,6 +98,7 @@ class GeneticAlgorith(object):
     def fitness(self, ch):
         weighted_mean = 0
         total_link = 0
+        cost = 0
 
         for i in range(2, len(self.__station)):
             num_links = 0
@@ -103,7 +109,7 @@ class GeneticAlgorith(object):
                 pointer = ch[current]
                 current = current + 2  # Returns the value which 'i'(turbine x) has found out, insert in a Link class, after that, append to history list
                 link = f'({current},{pointer})'  # Add chosen turbine with linked turbine into string
-                if link not in history:  # If for some reason, it isn't in the history list, so, be stored, if it is, it means there a cycle
+                if link not in history:  # If it isn't in the history list, so, be stored, if it is, it means there a cycle
                     history.append(link)
                     num_links = num_links + 1
                 else:
@@ -114,10 +120,11 @@ class GeneticAlgorith(object):
 
             # Add number of links and return the cost of its links into the class
             turbineLink = Links(num_links)
+            cost = cost + turbineLink.cost
             weighted_mean = weighted_mean + turbineLink.multiplication()
 
-        # Weighted Mean -> The smalled the better
-        return 0 if total_link == 0 else 1 / (weighted_mean / total_link)
+        # Weighted Mean -> The smaller the better
+        return (0,cost) if total_link == 0 else (1 / (weighted_mean / total_link), cost)
 
     "Inside population list of linkedlist, picks up a random chrome(linkedlist)"
 
@@ -129,8 +136,8 @@ class GeneticAlgorith(object):
 
     'Returns a row with fitness and population [(fitnees / population)]'
 
-    def fits_population(self):
-        return [(self.fitness(x), self.decode_linklist(x)) for x in self.__population]
+    # def fits_population(self):
+    #     return [(self.fitness(x), self.decode_linklist(x)) for x in self.__population]
 
     '''''
     Tournament Method
@@ -164,22 +171,43 @@ class GeneticAlgorith(object):
             yield f, m  # returns father and mother
 
     "Is it time to finish ? "
+
     def check_stops(self, fits_population):
 
         # increment the number of generations
         self.counter = self.counter + 1
-        best_chrome = list(sorted(fits_population))[0][1]
+        # best_chrome = list(sorted(fits_population))[0][1]
 
-        # saves the fits and leaves chromes
+        # saves the chromes and leave fits
+        chromes = [ch for f, ch in fits_population]
+
+        # saves the fits and leave chromes
         fits = [f for f, ch in fits_population]
 
+
         best = min(fits)
+        res = 10
+        if best == 0:
+            for i in fits:
+                if i < res and i != 0:
+                    res = i
+
+        if(res != 10):
+            best = res
+
         worst = max(fits)
+
+        index_best = fits.index(best)
+        best_chrome = chromes[index_best]
+
+        fitness, cost =self.fitness(best_chrome)
+
+
 
         avg = sum(fits) / len(fits)
 
         print(
-            f'[G- {self.counter}] best_chrome = {best_chrome} ---- \nscore = best -> {round(best, 5)}, wrost -> {round(worst, 5)} avg -> {round(avg, 5)}')
+            f'[G- {self.counter}] best_chrome = {best_chrome} ---- \ncost= {cost} ----- score = best -> {round(best, 5)}, wrost -> {round(worst, 5)} avg -> {round(avg, 5)}')
 
         return self.counter >= self.__max_max
 
@@ -187,14 +215,24 @@ class GeneticAlgorith(object):
 
     def run(self):
         while True:
+
             fits_pops = [(self.fitness(x), self.decode_linklist(x)) for x in self.__population]
+            costs = []
+            new_fits_pops = []
+
+            for i in range(len(fits_pops)):
+                costs.append(fits_pops[i][0][1])
+                new_fits_pops.append((fits_pops[i][0][0], fits_pops[i][1]))
+
+            # list = fits_pops[0][1]
+            # new_fits_popos = fitness, list
 
             # verify if it's the end
-            if self.check_stops(fits_pops):
+            if self.check_stops(new_fits_pops):
                 break
 
             # in case is not the end, determine who is the next population
-            self.__population = self.next(fits_pops)  #
+            self.__population = self.next(new_fits_pops)  #
             # Transform into linkedlist
             self.__population = self.encode()
         return self.__population
@@ -229,8 +267,29 @@ class GeneticAlgorith(object):
                 nexts.append(self.__mutation(ch) if mutate else ch)  # add new elements to population
         return nexts[0:size]
 
+    def network(self):
+
+        # um elemento da população ideal
+        one_chrome_ideal_pop = self.decode_linklist(self.__population[0])
+
+        x = self.__station.station_components()['lon'].to_numpy()
+        y = self.__station.station_components()['lat'].to_numpy()
+        for i in range(len(x)):
+            self.G.add_node(i, pos=(x[i], y[i]))
+
+        # random_chrome = self.decode_linklist(self.__random_chrome())
+        position = 2
+        for i in range(len(one_chrome_ideal_pop)):
+            self.G.add_edge(position, one_chrome_ideal_pop[i])
+            position = position + 1
+
+        pos = nx.get_node_attributes(self.G, 'pos')
+        nx.draw(self.G, pos, with_labels=True, node_size=180, font_size=12)
+        plt.show()
+
 
 import random
 
 ga = GeneticAlgorith(pop_size=500)
 ga.run()
+ga.network()

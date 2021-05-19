@@ -71,10 +71,10 @@ class Links:
         self.__custos = {1: 50.69836784, 2: 71.62465884, 3: 99.20682306, 4: 126.3675203, 5: 154.8583709, 6: 183.369654,
                          7: 217.0648069, 8: 255.9438294, 9: 300.0067216, 10: 349.2534835}
         self.link = link
-        self.custo = self.verify(self.link)
+        self.cost = self.verify(self.link)
 
     def multiplication(self):
-        return self.custo * self.link
+        return self.cost * self.link
 
     def verify(self, num_links):
         return 0 if num_links == 0 else self.verify_number_links(num_links)
